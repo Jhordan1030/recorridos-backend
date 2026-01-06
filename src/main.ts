@@ -1,18 +1,24 @@
-// src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import * as express from 'express';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+const server = express();
 
-  // Habilitar CORS para desarrollo
+export const createNestServer = async (expressInstance: express.Express) => {
+  const app = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(expressInstance),
+  );
+
+  // CORS
   app.enableCors({
-    origin: 'http://localhost:4200', // URL del frontend Angular
+    origin: '*', // Cambia en producción por tu dominio frontend
     credentials: true,
   });
 
-  // Validación global de DTOs
+  // Validación global
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -21,11 +27,16 @@ async function bootstrap() {
     }),
   );
 
-  // Prefijo global para todas las rutas
+  // Prefijo global
   app.setGlobalPrefix('api');
 
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`🚀 Aplicación corriendo en: http://localhost:${port}/api`);
-}
-bootstrap();
+  return app.init();
+};
+
+// Para Vercel
+createNestServer(server)
+  .then(() => console.log('Nest Ready'))
+  .catch((err) => console.error('Nest broken', err));
+
+// Exportar para Vercel
+export default server;
