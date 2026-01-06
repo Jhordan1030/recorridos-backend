@@ -3,37 +3,52 @@ import { ValidationPipe } from '@nestjs/common';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from '../src/app.module';
 import express from 'express';
+import serverless from 'serverless-http';
+import { APIGatewayProxyEvent, Context } from 'aws-lambda';
 
-const server = express();
-let app;
+const expressApp = express();
+let cachedHandler: any;
 
-async function createNestServer() {
-  if (!app) {
-    app = await NestFactory.create(AppModule, new ExpressAdapter(server));
+async function createNestApp() {
+  const app = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(expressApp),
+    {
+      logger: ['error', 'warn', 'log'],
+    }
+  );
 
-    app.enableCors({
-      origin: '*',
-      credentials: true,
-    });
+  app.enableCors({
+    origin: '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  });
 
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
 
-    app.setGlobalPrefix('api');
-
-    await app.init();
-  }
-
-  return server;
+  app.setGlobalPrefix('api');
+  await app.init();
+  return expressApp;
 }
 
-// Handler para Vercel
-export default async (req, res) => {
-  const server = await createNestServer();
-  return server(req, res);
-};
+async function bootstrap() {
+  const app = await createNestApp();
+  return serverless(app);
+}
+
+export default async function handler(event: APIGatewayProxyEvent, context: Context) {
+  if (!cachedHandler) {
+    cachedHandler = await bootstrap();
+  }
+  return cachedHandler(event, context);
+}

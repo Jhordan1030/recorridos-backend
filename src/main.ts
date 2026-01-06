@@ -1,42 +1,30 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import express from 'express';
+import { ValidationPipe } from '@nestjs/common';
 
-const server = express();
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
 
-export const createNestServer = async (expressInstance) => {
-  const app = await NestFactory.create(
-    AppModule,
-    new ExpressAdapter(expressInstance),
-  );
-
-  // CORS
+  // Configuración global similar a la de Vercel para consistencia
   app.enableCors({
-    origin: '*', // Cambia en producción por tu dominio frontend
+    origin: '*',
     credentials: true,
   });
 
-  // Validación global
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
     }),
   );
 
-  // Prefijo global
   app.setGlobalPrefix('api');
 
-  return app.init();
-};
-
-// Para Vercel
-createNestServer(server)
-  .then(() => console.log('Nest Ready'))
-  .catch((err) => console.error('Nest broken', err));
-
-// Exportar para Vercel
-export default server;
+  await app.listen(process.env.PORT || 3000);
+  console.log(`Application is running on: ${await app.getUrl()}`);
+}
+bootstrap();

@@ -12,19 +12,37 @@ import { PermisosModule } from './permisos/permisos.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: process.env.NODE_ENV === 'development' ? '.env' : undefined,
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get('DATABASE_URL'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false, // IMPORTANTE: false para no modificar tu BD existente
-        logging: true,
-        ssl: {
-          rejectUnauthorized: false, // Necesario para Supabase
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+
+        // Parsear la URL para debugging
+        console.log('Database URL:', databaseUrl?.substring(0, 50) + '...');
+
+        return {
+          type: 'postgres',
+          url: databaseUrl,
+          // Configuración SSL para Supabase en producción
+          ssl:
+            process.env.NODE_ENV === 'production'
+              ? {
+                  rejectUnauthorized: false,
+                  requestCert: true,
+                }
+              : false,
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: false, // NUNCA true en producción
+          logging: process.env.NODE_ENV === 'development',
+          extra: {
+            max: 10,
+            connectionTimeoutMillis: 10000,
+            idleTimeoutMillis: 30000,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
     AuthModule,
